@@ -1,0 +1,368 @@
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+#gameCanvas{display:block;width:100%;cursor:pointer}
+#ui{font-family:monospace;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;background:#0a0a0f;border-bottom:1px solid #ff2d78}
+.stat{font-size:13px;color:#ff2d78;letter-spacing:2px}
+.stat span{color:#00f5ff}
+#msg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;font-family:monospace;pointer-events:none}
+#msg h2{font-size:22px;letter-spacing:3px;margin-bottom:8px}
+#msg p{font-size:12px;letter-spacing:2px;opacity:.7}
+#wrapper{position:relative;background:#0a0a0f;border:1px solid #ff2d78;border-radius:8px;overflow:hidden}
+#startBtn{margin-top:12px;padding:8px 20px;background:transparent;border:1px solid #ff2d78;color:#ff2d78;font-family:monospace;font-size:13px;letter-spacing:2px;cursor:pointer;border-radius:4px}
+#startBtn:hover{background:#ff2d7822}
+#levelBanner{position:absolute;top:30%;left:50%;transform:translateX(-50%);font-family:monospace;font-size:20px;letter-spacing:4px;color:#00f5ff;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+</style>
+
+<div id="wrapper">
+  <div id="ui">
+    <div class="stat">SCORE <span id="score">0</span></div>
+    <div class="stat">LEVEL <span id="level">1</span></div>
+    <div class="stat">BEST <span id="best">0</span></div>
+    <div class="stat">LIVES <span id="lives">3</span></div>
+  </div>
+  <canvas id="gameCanvas" width="680" height="220"></canvas>
+  <div id="msg">
+    <h2 style="color:#ff2d78">CYBER RUN</h2>
+    <p style="color:#00f5ff">SALTA ENEMIGOS · SOBREVIVE LA CIUDAD</p>
+    <button id="startBtn" onclick="startGame()">INICIAR</button>
+  </div>
+  <div id="levelBanner"></div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const GROUND = H - 40;
+
+let score=0, best=parseInt(localStorage.getItem('cb_best')||0), level=1, lives=3;
+let gameRunning=false, gameOver=false, animId=null;
+let frameCount=0, spawnTimer=0;
+
+const state = {
+  player: null,
+  enemies: [],
+  particles: [],
+  buildings: [],
+  stars: [],
+  ground: 0,
+  speed: 3,
+  jumpPressed: false,
+};
+
+function el(id){return document.getElementById(id)}
+
+function updateUI(){
+  el('score').textContent=score;
+  el('level').textContent=level;
+  el('best').textContent=best;
+  el('lives').textContent='♥'.repeat(lives);
+}
+
+function showMsg(show){el('msg').style.display=show?'flex':'none';el('msg').style.flexDirection='column';el('msg').style.alignItems='center';}
+
+function initBuildings(){
+  state.buildings=[];
+  for(let i=0;i<12;i++){
+    state.buildings.push({
+      x: i*(W/6)+ Math.random()*40,
+      w: 30+Math.random()*60,
+      h: 40+Math.random()*80,
+      color: ['#1a0a2e','#0d1b2a','#12001e','#0a0f1e'][Math.floor(Math.random()*4)],
+      windows: Math.floor(Math.random()*8)+2,
+      windowColor: ['#ff2d78','#00f5ff','#b347ff','#f5ff00'][Math.floor(Math.random()*4)],
+    });
+  }
+  state.stars=[];
+  for(let i=0;i<40;i++){
+    state.stars.push({x:Math.random()*W,y:Math.random()*(GROUND-90),r:Math.random()*1.5+.3,c:Math.random()>.5?'#ff2d7888':'#00f5ff88'});
+  }
+}
+
+function initPlayer(){
+  state.player={
+    x:80, y:GROUND, w:22, h:36,
+    vy:0, onGround:true,
+    frame:0, frameTimer:0,
+    invincible:0,
+  };
+}
+
+function initLevel(){
+  state.enemies=[];
+  state.particles=[];
+  spawnTimer=0;
+  state.speed=2.5+level*0.4;
+}
+
+function startGame(){
+  score=0; level=1; lives=3;
+  showMsg(false);
+  gameRunning=true; gameOver=false;
+  initBuildings();
+  initPlayer();
+  initLevel();
+  updateUI();
+  if(animId) cancelAnimationFrame(animId);
+  loop();
+}
+
+function jump(){
+  if(state.player && state.player.onGround && gameRunning && !gameOver){
+    state.player.vy=-11;
+    state.player.onGround=false;
+    spawnParticles(state.player.x+11,state.player.y+state.player.h,4,'#00f5ff');
+  }
+}
+
+document.addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();jump()}});
+canvas.addEventListener('click',()=>{if(gameRunning&&!gameOver)jump(); else if(gameOver)startGame();});
+el('wrapper').addEventListener('touchstart',e=>{e.preventDefault();if(gameRunning&&!gameOver)jump(); else if(gameOver)startGame();},{passive:false});
+
+function spawnParticles(x,y,n,color){
+  for(let i=0;i<n;i++){
+    state.particles.push({x,y,vx:(Math.random()-.5)*3,vy:-Math.random()*3-1,life:20+Math.random()*15,maxLife:35,color});
+  }
+}
+
+function spawnEnemy(){
+  const t=Math.random();
+  let enemy;
+  if(t<0.45){
+    enemy={type:'drone',x:W+20,y:GROUND-45,w:28,h:20,vy:0,phase:Math.random()*Math.PI*2,color:'#ff2d78',eyeColor:'#fff'};
+  } else if(t<0.75){
+    enemy={type:'spike',x:W+10,y:GROUND,w:18,h:30,color:'#b347ff',glowColor:'#b347ff'};
+  } else {
+    enemy={type:'bot',x:W+10,y:GROUND,w:20,h:32,frame:0,fTimer:0,color:'#00f5ff',legColor:'#0088aa'};
+  }
+  state.enemies.push(enemy);
+}
+
+function checkLevel(){
+  const thresholds=[0,300,700,1200,1800,2600,3500];
+  const newLevel=Math.min(thresholds.filter(t=>score>=t).length,7);
+  if(newLevel>level){
+    level=newLevel;
+    state.speed=2.5+level*0.4;
+    showLevelBanner();
+    updateUI();
+  }
+}
+
+function showLevelBanner(){
+  const b=el('levelBanner');
+  b.textContent='LEVEL '+level;
+  b.style.opacity='1';
+  setTimeout(()=>{b.style.opacity='0'},1500);
+}
+
+function hitPlayer(){
+  if(state.player.invincible>0) return;
+  lives--;
+  updateUI();
+  spawnParticles(state.player.x+11,state.player.y+18,12,'#ff2d78');
+  if(lives<=0){
+    endGame();
+  } else {
+    state.player.invincible=90;
+  }
+}
+
+function endGame(){
+  gameRunning=false;
+  gameOver=true;
+  if(score>best){best=score;localStorage.setItem('cb_best',best);}
+  updateUI();
+  const msg=el('msg');
+  msg.innerHTML=`<h2 style="color:#ff2d78">GAME OVER</h2><p style="color:#00f5ff;margin-bottom:4px">SCORE: ${score}</p><p style="color:#b347ff;margin-bottom:12px">BEST: ${best}</p><button id="startBtn" onclick="startGame()" style="padding:8px 20px;background:transparent;border:1px solid #ff2d78;color:#ff2d78;font-family:monospace;font-size:13px;letter-spacing:2px;cursor:pointer;border-radius:4px">REINTENTAR</button>`;
+  showMsg(true);
+}
+
+function drawBackground(){
+  ctx.fillStyle='#07050f';
+  ctx.fillRect(0,0,W,H);
+  state.stars.forEach(s=>{
+    ctx.fillStyle=s.c;
+    ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();
+  });
+  state.buildings.forEach(b=>{
+    ctx.fillStyle=b.color;
+    ctx.fillRect(b.x,GROUND-b.h,b.w,b.h);
+    const cols=3,rows=Math.floor(b.h/18);
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+      if(Math.random()<.03) continue;
+      ctx.fillStyle=Math.random()<.1?b.windowColor:b.windowColor+'44';
+      ctx.fillRect(b.x+4+c*((b.w-8)/cols),GROUND-b.h+6+r*16,6,8);
+    }
+  });
+}
+
+function scrollBuildings(){
+  state.buildings.forEach(b=>{
+    b.x-=state.speed*.3;
+    if(b.x+b.w<0){b.x=W+Math.random()*80;b.h=40+Math.random()*80;b.w=30+Math.random()*60;}
+  });
+  state.stars.forEach(s=>{
+    s.x-=state.speed*.1;
+    if(s.x<0)s.x=W;
+  });
+}
+
+function drawGround(){
+  ctx.fillStyle='#1a0030';
+  ctx.fillRect(0,GROUND,W,H-GROUND);
+  ctx.fillStyle='#ff2d78';
+  ctx.fillRect(0,GROUND,W,2);
+  ctx.fillStyle='#ff2d7833';
+  ctx.fillRect(0,GROUND+2,W,4);
+  for(let i=0;i<W;i+=60){
+    ctx.fillStyle='#00f5ff44';
+    ctx.fillRect(i+frameCount*.5%60,GROUND+8,30,1);
+  }
+}
+
+function drawPlayer(){
+  const p=state.player;
+  if(p.invincible>0 && Math.floor(p.invincible/5)%2===0) return;
+  const x=p.x, y=p.y, run=!p.onGround;
+
+  p.frameTimer++;
+  if(p.frameTimer>6){p.frame=(p.frame+1)%4;p.frameTimer=0;}
+
+  const leg=p.onGround?Math.sin(p.frame*Math.PI/2)*5:0;
+
+  ctx.fillStyle='#b347ff';
+  ctx.fillRect(x+4,y,14,18);
+  ctx.fillStyle='#00f5ff';
+  ctx.fillRect(x+2,y+2,4,8);
+  ctx.fillStyle='#ff2d78';
+  ctx.fillRect(x+12,y+18,4,12);
+  ctx.fillStyle='#b347ff88';
+  ctx.fillRect(x,y+18,4,12);
+  ctx.fillStyle='#222';
+  ctx.fillRect(x+2,y+30,4+leg,6);
+  ctx.fillRect(x+12,y+30,4-leg,6);
+  ctx.fillStyle='#00f5ff';
+  ctx.fillRect(x+4,y-8,14,10);
+  ctx.fillStyle='#ff2d78';
+  ctx.fillRect(x+8,y-4,4,4);
+  ctx.fillStyle='#00f5ffcc';
+  ctx.beginPath();ctx.moveTo(x-2,y+8);ctx.lineTo(x-10,y+14+leg);ctx.lineTo(x-6,y+14+leg);ctx.lineTo(x+2,y+10);ctx.fill();
+
+  if(!p.onGround){
+    ctx.fillStyle='#b347ff44';
+    ctx.fillRect(x-4,y+p.h+2,p.w+8,4);
+  }
+}
+
+function drawEnemy(e){
+  if(e.type==='drone'){
+    const bob=Math.sin(frameCount*.08+e.phase)*6;
+    const ey=e.y+bob;
+    ctx.fillStyle='#ff2d78cc';
+    ctx.beginPath();ctx.ellipse(e.x+14,ey+10,14,8,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#ff006688';
+    ctx.beginPath();ctx.ellipse(e.x+14,ey+14,8,4,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(e.x+10,ey+8,3,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(e.x+18,ey+8,3,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#f00';
+    ctx.beginPath();ctx.arc(e.x+10,ey+8,1.5,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(e.x+18,ey+8,1.5,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#ff2d7888';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(e.x+4,ey+10);ctx.lineTo(e.x-4,ey+10);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(e.x+24,ey+10);ctx.lineTo(e.x+32,ey+10);ctx.stroke();
+    e.hitX=e.x;e.hitY=ey;e.hitW=e.w;e.hitH=e.h;
+  } else if(e.type==='spike'){
+    ctx.fillStyle=e.color;
+    ctx.beginPath();ctx.moveTo(e.x,e.y);ctx.lineTo(e.x+9,-e.h+e.y);ctx.lineTo(e.x+18,e.y);ctx.fill();
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.moveTo(e.x+4,e.y-4);ctx.lineTo(e.x+9,e.y-e.h+4);ctx.lineTo(e.x+14,e.y-4);ctx.fill();
+    ctx.strokeStyle=e.glowColor+'66';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(e.x,e.y);ctx.lineTo(e.x+9,e.y-e.h);ctx.lineTo(e.x+18,e.y);ctx.stroke();
+  } else if(e.type==='bot'){
+    e.fTimer++;if(e.fTimer>8){e.frame=(e.frame+1)%2;e.fTimer=0;}
+    const leg=e.frame===0?3:-3;
+    ctx.fillStyle=e.color;
+    ctx.fillRect(e.x+2,e.y-e.h,16,12);
+    ctx.fillStyle='#0a1a2a';
+    ctx.fillRect(e.x+4,e.y-e.h+2,12,8);
+    ctx.fillStyle='#f5ff00';
+    ctx.fillRect(e.x+6,e.y-e.h+4,4,4);
+    ctx.fillStyle=e.legColor;
+    ctx.fillRect(e.x,e.y-e.h+12,20,12);
+    ctx.fillStyle='#0d2233';
+    ctx.fillRect(e.x+4,e.y-e.h+18,4,14+leg);
+    ctx.fillRect(e.x+12,e.y-e.h+18,4,14-leg);
+  }
+}
+
+function drawParticles(){
+  state.particles.forEach(p=>{
+    ctx.globalAlpha=p.life/p.maxLife;
+    ctx.fillStyle=p.color;
+    ctx.fillRect(p.x-2,p.y-2,4,4);
+  });
+  ctx.globalAlpha=1;
+}
+
+function updatePlayer(){
+  const p=state.player;
+  p.vy+=0.55;
+  p.y+=p.vy;
+  if(p.y>=GROUND){p.y=GROUND;p.vy=0;p.onGround=true;}
+  if(p.invincible>0)p.invincible--;
+}
+
+function updateEnemies(){
+  spawnTimer++;
+  const spawnRate=Math.max(50,110-level*8);
+  if(spawnTimer>=spawnRate){spawnTimer=0;spawnEnemy();}
+  state.enemies.forEach(e=>{
+    e.x-=state.speed;
+    const p=state.player;
+    const ex=e.hitX!==undefined?e.hitX:e.x;
+    const ey=e.hitY!==undefined?e.hitY:e.y-e.h;
+    const ew=e.hitW!==undefined?e.hitW:e.w;
+    const eh=e.hitH!==undefined?e.hitH:e.h;
+    if(p.x+p.w-6>ex+4 && p.x+6<ex+ew-4 && p.y+p.h-4>ey+4 && p.y+4<ey+eh-4){
+      hitPlayer();
+      spawnParticles(e.x+10,e.y-10,8,'#ff2d78');
+      e.x=-100;
+    }
+  });
+  state.enemies=state.enemies.filter(e=>e.x>-60);
+}
+
+function updateParticles(){
+  state.particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.15;p.life--;});
+  state.particles=state.particles.filter(p=>p.life>0);
+}
+
+function loop(){
+  if(!gameRunning){return;}
+  frameCount++;
+  score+=Math.ceil(state.speed*.15);
+  checkLevel();
+  updateUI();
+
+  ctx.clearRect(0,0,W,H);
+  drawBackground();
+  scrollBuildings();
+  drawGround();
+  updatePlayer();
+  updateEnemies();
+  updateParticles();
+
+  state.enemies.forEach(drawEnemy);
+  drawPlayer();
+  drawParticles();
+
+  animId=requestAnimationFrame(loop);
+}
+
+initBuildings();
+showMsg(true);
+updateUI();
+</script>
