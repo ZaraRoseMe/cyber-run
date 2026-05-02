@@ -12,11 +12,11 @@
     .stat{font-size:13px;color:#ff2d78;letter-spacing:2px}
     .stat span{color:#00f5ff}
     #gameCanvas{display:block;width:100%;cursor:pointer}
-    #msg{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;flex-direction:column;align-items:center;pointer-events:none}
-    #msg h2{font-size:22px;letter-spacing:3px;margin-bottom:8px}
-    #msg p{font-size:12px;letter-spacing:2px;opacity:.7;margin-bottom:4px}
-    .btn{margin-top:12px;padding:8px 20px;background:transparent;border:1px solid #ff2d78;color:#ff2d78;font-family:monospace;font-size:13px;letter-spacing:2px;cursor:pointer;border-radius:4px;pointer-events:all}
-    .btn:hover{background:#ff2d7822}
+    #overlay{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:rgba(7,5,15,0.7)}
+    #overlay h2{font-size:22px;letter-spacing:3px;margin-bottom:8px;color:#ff2d78}
+    #overlay p{font-size:12px;letter-spacing:2px;opacity:.7;margin-bottom:4px;color:#00f5ff}
+    #overlay button{margin-top:12px;padding:8px 24px;background:transparent;border:1px solid #ff2d78;color:#ff2d78;font-family:monospace;font-size:14px;letter-spacing:2px;cursor:pointer;border-radius:4px}
+    #overlay button:hover{background:#ff2d7833}
     #levelBanner{position:absolute;top:30%;left:50%;transform:translateX(-50%);font-family:monospace;font-size:20px;letter-spacing:4px;color:#00f5ff;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
   </style>
 </head>
@@ -29,10 +29,10 @@
     <div class="stat">LIVES <span id="lives">♥♥♥</span></div>
   </div>
   <canvas id="gameCanvas" width="680" height="220"></canvas>
-  <div id="msg">
-    <h2 style="color:#ff2d78">CYBER RUN</h2>
-    <p style="color:#00f5ff">SALTA ENEMIGOS · SOBREVIVE LA CIUDAD</p>
-    <button class="btn" onclick="startGame()">INICIAR</button>
+  <div id="overlay">
+    <h2>CYBER RUN</h2>
+    <p>SALTA ENEMIGOS · SOBREVIVE LA CIUDAD</p>
+    <button onclick="startGame()">INICIAR</button>
   </div>
   <div id="levelBanner"></div>
 </div>
@@ -48,7 +48,8 @@ const state={player:null,enemies:[],particles:[],buildings:[],stars:[],speed:3};
 
 function el(id){return document.getElementById(id)}
 function updateUI(){el('score').textContent=score;el('level').textContent=level;el('best').textContent=best;el('lives').textContent='♥'.repeat(lives);}
-function showMsg(show){el('msg').style.display=show?'flex':'none';}
+function showOverlay(html){const o=el('overlay');o.style.display='flex';o.innerHTML=html;}
+function hideOverlay(){el('overlay').style.display='none';}
 
 function initBuildings(){
   state.buildings=[];
@@ -68,7 +69,7 @@ function initLevel(){state.enemies=[];state.particles=[];spawnTimer=0;state.spee
 
 function startGame(){
   score=0;level=1;lives=3;
-  showMsg(false);
+  hideOverlay();
   gameRunning=true;gameOver=false;
   initBuildings();initPlayer();initLevel();updateUI();
   if(animId)cancelAnimationFrame(animId);
@@ -83,8 +84,10 @@ function jump(){
 }
 
 document.addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();jump();}});
-canvas.addEventListener('click',()=>{if(gameRunning&&!gameOver)jump();else if(gameOver)startGame();});
-document.addEventListener('touchstart',e=>{e.preventDefault();if(gameRunning&&!gameOver)jump();else if(gameOver)startGame();},{passive:false});
+canvas.addEventListener('click',()=>{if(gameRunning&&!gameOver)jump();});
+document.addEventListener('touchstart',e=>{
+  if(gameRunning&&!gameOver){e.preventDefault();jump();}
+},{passive:false});
 
 function spawnParticles(x,y,n,color){
   for(let i=0;i<n;i++){state.particles.push({x,y,vx:(Math.random()-.5)*3,vy:-Math.random()*3-1,life:20+Math.random()*15,maxLife:35,color});}
@@ -122,8 +125,12 @@ function endGame(){
   gameRunning=false;gameOver=true;
   if(score>best){best=score;localStorage.setItem('cb_best',best);}
   updateUI();
-  el('msg').innerHTML=`<h2 style="color:#ff2d78;font-family:monospace;letter-spacing:3px;margin-bottom:8px">GAME OVER</h2><p style="color:#00f5ff;font-family:monospace;font-size:12px;letter-spacing:2px;margin-bottom:4px">SCORE: ${score}</p><p style="color:#b347ff;font-family:monospace;font-size:12px;letter-spacing:2px;margin-bottom:12px">BEST: ${best}</p><button onclick="startGame()" class="btn">REINTENTAR</button>`;
-  showMsg(true);
+  showOverlay(`
+    <h2 style="color:#ff2d78;font-family:monospace;letter-spacing:3px;margin-bottom:8px">GAME OVER</h2>
+    <p style="color:#00f5ff;font-family:monospace;font-size:12px;letter-spacing:2px;margin-bottom:4px">SCORE: ${score}</p>
+    <p style="color:#b347ff;font-family:monospace;font-size:12px;letter-spacing:2px;margin-bottom:12px">BEST: ${best}</p>
+    <button onclick="startGame()" style="margin-top:12px;padding:8px 24px;background:transparent;border:1px solid #ff2d78;color:#ff2d78;font-family:monospace;font-size:14px;letter-spacing:2px;cursor:pointer;border-radius:4px">REINTENTAR</button>
+  `);
 }
 
 function drawBg(){
@@ -225,7 +232,8 @@ function loop(){
   animId=requestAnimationFrame(loop);
 }
 
-initBuildings();showMsg(true);updateUI();
+initBuildings();updateUI();
+drawBg();drawGround();
 </script>
 </body>
 </html>
